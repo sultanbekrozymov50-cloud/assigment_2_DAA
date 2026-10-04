@@ -15,9 +15,16 @@ public class DynamicArray implements IntList {
         this.metrics = metrics != null ? metrics : new Metrics();
     }
 
+    public DynamicArray(int initialCapacity) {
+        this(initialCapacity, new Metrics());
+    }
+
+    public DynamicArray() {
+        this(10, new Metrics());
+    }
+
     @Override
     public void add(int x) {
-        metrics.incSteps();
         if (size == capacity) {
             grow();
         }
@@ -30,7 +37,6 @@ public class DynamicArray implements IntList {
         if (index < 0 || index > size) {
             throw new IndexOutOfBoundsException("Индекс за пределами: " + index);
         }
-        metrics.incSteps();
         if (size == capacity) {
             grow();
         }
@@ -67,7 +73,6 @@ public class DynamicArray implements IntList {
 
     @Override
     public boolean contains(int x) {
-        metrics.incSteps();
         for (int i = 0; i < size; i++) {
             metrics.incSteps();
             metrics.incComparisons();
@@ -81,6 +86,10 @@ public class DynamicArray implements IntList {
     @Override
     public int getSize() {
         return size;
+    }
+
+    public int getCapacity() {
+        return capacity;
     }
 
     private void grow() {

@@ -6,201 +6,299 @@ import structures.IntList;
 import structures.MyLinkedList;
 import structures.MinHeap;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.Random;
-import java.util.function.Consumer;
 
 public class Benchmark {
-    private static final String CSV_FILE = "results.csv";
-    private static final int N = 10_000;
-    private static final Random random = new Random(42);
+    private static final String OUTPUT_DIR = "results";
+    private static final String CSV_FILE = "results/results.csv";
+    private static final int[] SIZES = {100, 1_000, 10_000, 100_000};
+    private static final int WARMUP_RUNS = 2;
+    private static final int MEASURE_RUNS = 5;
+
+    private static class RunResult {
+        double timeMs;
+        long steps;
+        long moves;
+        long comparisons;
+
+        RunResult(double timeMs, long steps, long moves, long comparisons) {
+            this.timeMs = timeMs;
+            this.steps = steps;
+            this.moves = moves;
+            this.comparisons = comparisons;
+        }
+    }
 
     public static void main(String[] args) {
+        File dir = new File(OUTPUT_DIR);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+
         try (PrintWriter writer = new PrintWriter(new FileWriter(CSV_FILE))) {
-            // CSV Header
-            writer.println("Workload;DataStructure;Elements;TimeMs;Steps;Moves;Comparisons");
+            // Заголовок CSV с разделителем-запятой согласно ТЗ
+            writer.println("workload,variant,structure,n,time_ms,steps,moves,comparisons");
 
-            runW1_MassiveInsert(writer);
-            runW2_ContainsSearch(writer);
-            runW3_AccessAndPeek(writer);
-            runW4_MassiveDelete(writer);
+            System.out.println("Запуск нагрузочного бенчмарка...");
 
-            System.out.println("Бенчмарк успешно завершен. Результаты сохранены в " + CSV_FILE);
+            for (int n : SIZES) {
+                System.out.println("--- Запуск для N = " + n + " ---");
+                runW1(writer, n);
+                runW2(writer, n);
+                runW3(writer, n);
+                runW4(writer, n);
+            }
+
+            System.out.println("Бенчмарк успешно завершен! Результаты сохранены в " + CSV_FILE);
         } catch (IOException e) {
-            System.err.println("Ошибка при записи в CSV: " + e.getMessage());
+            System.err.println("Ошибка записи CSV: " + e.getMessage());
         }
     }
 
-    // W1: Массовая вставка N элементов
-    private static void runW1_MassiveInsert(PrintWriter writer) {
-        String workload = "W1_MassiveInsert";
-        int[] data = generateRandomData(N);
+    // Выполнение нагрузки с прогревом и вычислением медианы из 5 замеров
+    private static RunResult executeWithWarmup(Runnable benchmarkTask, Metrics metrics) {
+        // 1. Фаза прогрева (Warmup)
+        for (int i = 0; i < WARMUP_RUNS; i++) {
+            metrics.reset();
+            benchmarkTask.run();
+        }
 
-        // 1. DynamicArray (через IntList)
-        Metrics m1 = new Metrics();
-        IntList da = new DynamicArray(10, m1);
-        runListWorkload(writer, workload, "DynamicArray", da, m1, list -> {
-            for (int x : data) list.add(x);
-        }, N);
+        // 2. Фаза измерений
+        List<RunResult> results = new ArrayList<>();
+        for (int i = 0; i < MEASURE_RUNS; i++) {
+            metrics.reset();
+            long start = System.nanoTime();
+            benchmarkTask.run();
+            long end = System.nanoTime();
+            double timeMs = (end - start) / 1_000_000.0;
+            results.add(new RunResult(timeMs, metrics.getSteps(), metrics.getMoves(), metrics.getComparisons()));
+        }
 
-        // 2. MyLinkedList (через IntList)
-        Metrics m2 = new Metrics();
-        IntList list = new MyLinkedList(m2);
-        runListWorkload(writer, workload, "MyLinkedList", list, m2, l -> {
-            for (int x : data) l.add(x);
-        }, N);
-
-        // 3. MinHeap
-        Metrics m3 = new Metrics();
-        MinHeap heap = new MinHeap(10, m3);
-        runCustomWorkload(writer, workload, "MinHeap", m3, () -> {
-            for (int x : data) heap.insert(x);
-        }, N);
+        // 3. Сортировка и выбор медианы (индекс 2 из 5)
+        results.sort((a, b) -> Double.compare(a.timeMs, b.timeMs));
+        return results.get(MEASURE_RUNS / 2);
     }
 
-    // W2: Поиск методом contains() для 1,000 элементов
-    private static void runW2_ContainsSearch(PrintWriter writer) {
-        String workload = "W2_ContainsSearch";
+    // --- W1: 10 000 вызовов get со случайным индексом ---
+    private static void runW1(PrintWriter writer, int n) {
+        String workload = "W1";
+        String variant = "default";
+        int getOps = 10_000;
+
+        // DynamicArray
+        {
+            Metrics m = new Metrics();
+            RunResult res = executeWithWarmup(() -> {
+                IntList list = createAndPopulateList(new DynamicArray(n, m), n);
+                m.reset();
+                Random rand = new Random(12345);
+                for (int i = 0; i < getOps; i++) {
+                    list.get(rand.nextInt(n));
+                }
+            }, m);
+            writeCsvRow(writer, workload, variant, "DynamicArray", n, res);
+        }
+
+        // MyLinkedList
+        {
+            Metrics m = new Metrics();
+            RunResult res = executeWithWarmup(() -> {
+                IntList list = createAndPopulateList(new MyLinkedList(m), n);
+                m.reset();
+                Random rand = new Random(12345);
+                for (int i = 0; i < getOps; i++) {
+                    list.get(rand.nextInt(n));
+                }
+            }, m);
+            writeCsvRow(writer, workload, variant, "MyLinkedList", n, res);
+        }
+    }
+
+    // --- W2: 1 000 вызовов contains (50% есть в структуре, 50% нет) ---
+    private static void runW2(PrintWriter writer, int n) {
+        String workload = "W2";
+        String variant = "default";
         int searchOps = 1_000;
-        int[] data = generateRandomData(N);
-        int[] searchKeys = generateRandomData(searchOps);
 
-        // DynamicArray (через IntList)
-        Metrics m1 = new Metrics();
-        IntList da = new DynamicArray(N, m1);
-        for (int x : data) da.add(x);
-        runListWorkload(writer, workload, "DynamicArray", da, m1, list -> {
-            for (int key : searchKeys) list.contains(key);
-        }, searchOps);
+        // DynamicArray
+        {
+            Metrics m = new Metrics();
+            RunResult res = executeWithWarmup(() -> {
+                int[] initialData = generateData(n, 42);
+                IntList list = new DynamicArray(n, m);
+                for (int val : initialData) list.add(val);
 
-        // MyLinkedList (через IntList)
-        Metrics m2 = new Metrics();
-        IntList list = new MyLinkedList(m2);
-        for (int x : data) list.add(x);
-        runListWorkload(writer, workload, "MyLinkedList", list, m2, l -> {
-            for (int key : searchKeys) l.contains(key);
-        }, searchOps);
-    }
+                int[] searchKeys = generateSearchKeys(initialData, searchOps);
+                m.reset();
 
-    // W3: Доступ по индексу (get) / чтение минимума (peekMin)
-    private static void runW3_AccessAndPeek(PrintWriter writer) {
-        String workload = "W3_AccessAndPeek";
-        int accessOps = 5_000;
-        int[] data = generateRandomData(N);
-
-        // DynamicArray (через IntList)
-        Metrics m1 = new Metrics();
-        IntList da = new DynamicArray(N, m1);
-        for (int x : data) da.add(x);
-        runListWorkload(writer, workload, "DynamicArray", da, m1, list -> {
-            for (int i = 0; i < accessOps; i++) list.get(i % N);
-        }, accessOps);
-
-        // MyLinkedList (через IntList)
-        Metrics m2 = new Metrics();
-        IntList list = new MyLinkedList(m2);
-        for (int x : data) list.add(x);
-        runListWorkload(writer, workload, "MyLinkedList", list, m2, l -> {
-            for (int i = 0; i < accessOps; i++) l.get(i % N);
-        }, accessOps);
-
-        // MinHeap (peekMin)
-        Metrics m3 = new Metrics();
-        MinHeap heap = new MinHeap(N, m3);
-        for (int x : data) heap.insert(x);
-        runCustomWorkload(writer, workload, "MinHeap", m3, () -> {
-            for (int i = 0; i < accessOps; i++) heap.peekMin();
-        }, accessOps);
-    }
-
-    // W4: Удаление элементов с начала (remove(0) / extractMin)
-    private static void runW4_MassiveDelete(PrintWriter writer) {
-        String workload = "W4_MassiveDelete";
-        int deleteOps = 1_000;
-        int[] data = generateRandomData(N);
-
-        // DynamicArray (через IntList)
-        Metrics m1 = new Metrics();
-        IntList da = new DynamicArray(N, m1);
-        for (int x : data) da.add(x);
-        runListWorkload(writer, workload, "DynamicArray", da, m1, list -> {
-            for (int i = 0; i < deleteOps; i++) list.remove(0);
-        }, deleteOps);
-
-        // MyLinkedList (через IntList)
-        Metrics m2 = new Metrics();
-        IntList list = new MyLinkedList(m2);
-        for (int x : data) list.add(x);
-        runListWorkload(writer, workload, "MyLinkedList", list, m2, l -> {
-            for (int i = 0; i < deleteOps; i++) l.remove(0);
-        }, deleteOps);
-
-        // MinHeap (extractMin)
-        Metrics m3 = new Metrics();
-        MinHeap heap = new MinHeap(N, m3);
-        for (int x : data) heap.insert(x);
-        runCustomWorkload(writer, workload, "MinHeap", m3, () -> {
-            for (int i = 0; i < deleteOps; i++) heap.extractMin();
-        }, deleteOps);
-    }
-
-    // Универсальный полиморфный запуск для реализаций IntList
-    private static void runListWorkload(
-            PrintWriter writer,
-            String workloadName,
-            String dsName,
-            IntList list,
-            Metrics metrics,
-            Consumer<IntList> action,
-            int opsCount
-    ) {
-        metrics.reset(); // Сброс счетчиков перед замерной фазой
-        long start = System.nanoTime();
-
-        action.accept(list); // Выполнение операций через интерфейс IntList
-
-        long timeMs = (System.nanoTime() - start) / 1_000_000;
-        writeRow(writer, workloadName, dsName, opsCount, timeMs, metrics);
-    }
-
-    // Запуск для кучи и действий, не привязанных к IntList
-    private static void runCustomWorkload(
-            PrintWriter writer,
-            String workloadName,
-            String dsName,
-            Metrics metrics,
-            Runnable action,
-            int opsCount
-    ) {
-        metrics.reset();
-        long start = System.nanoTime();
-
-        action.run();
-
-        long timeMs = (System.nanoTime() - start) / 1_000_000;
-        writeRow(writer, workloadName, dsName, opsCount, timeMs, metrics);
-    }
-
-    private static void writeRow(PrintWriter writer, String workload, String dsName,
-                                 int ops, long timeMs, Metrics metrics) {
-        writer.printf("%s;%s;%d;%d;%d;%d;%d%n",
-                workload,
-                dsName,
-                ops,
-                timeMs,
-                metrics.getSteps(),
-                metrics.getMoves(),
-                metrics.getComparisons()
-        );
-    }
-
-    private static int[] generateRandomData(int count) {
-        int[] arr = new int[count];
-        for (int i = 0; i < count; i++) {
-            arr[i] = random.nextInt(100_000);
+                for (int key : searchKeys) {
+                    list.contains(key);
+                }
+            }, m);
+            writeCsvRow(writer, workload, variant, "DynamicArray", n, res);
         }
-        return arr;
+
+        // MyLinkedList
+        {
+            Metrics m = new Metrics();
+            RunResult res = executeWithWarmup(() -> {
+                int[] initialData = generateData(n, 42);
+                IntList list = new MyLinkedList(m);
+                for (int val : initialData) list.add(val);
+
+                int[] searchKeys = generateSearchKeys(initialData, searchOps);
+                m.reset();
+
+                for (int key : searchKeys) {
+                    list.contains(key);
+                }
+            }, m);
+            writeCsvRow(writer, workload, variant, "MyLinkedList", n, res);
+        }
     }
-}
+
+    // --- W3: 1 000 вставок и 1 000 удалений в индексе 0 (head) и n/2 (middle) ---
+    private static void runW3(PrintWriter writer, int n) {
+        String workload = "W3";
+        int ops = 1_000;
+        String[] variants = {"head", "middle"};
+
+        for (String variant : variants) {
+            // DynamicArray
+            {
+                Metrics m = new Metrics();
+                RunResult res = executeWithWarmup(() -> {
+                    IntList list = createAndPopulateList(new DynamicArray(n, m), n);
+                    m.reset();
+
+                    int insertVal = 999_999;
+                    for (int i = 0; i < ops; i++) {
+                        int idx = variant.equals("head") ? 0 : list.getSize() / 2;
+                        list.add(idx, insertVal);
+                    }
+                    for (int i = 0; i < ops; i++) {
+                        int idx = variant.equals("head") ? 0 : list.getSize() / 2;
+                        list.remove(idx);
+                    }
+                }, m);
+                writeCsvRow(writer, workload, variant, "DynamicArray", n, res);
+            }
+
+            // MyLinkedList
+            {
+                Metrics m = new Metrics();
+                RunResult res = executeWithWarmup(() -> {
+                    IntList list = createAndPopulateList(new MyLinkedList(m), n);
+                    m.reset();
+
+                    int insertVal = 999_999;
+                    for (int i = 0; i < ops; i++) {
+                        int idx = variant.equals("head") ? 0 : list.getSize() / 2;
+                        list.add(idx, insertVal);
+                    }
+                    for (int i = 0; i < ops; i++) {
+                        int idx = variant.equals("head") ? 0 : list.getSize() / 2;
+                        list.remove(idx);
+                    }
+                }, m);
+                writeCsvRow(writer, workload, variant, "MyLinkedList", n, res);
+            }
+        }
+    }
+
+    // --- W4: MinHeap — n вставок, n extractMin с проверкой неубывания ---
+    private static void runW4(PrintWriter writer, int n) {
+        String workload = "W4";
+        String variant = "default";
+
+        Metrics m = new Metrics();
+        RunResult res = executeWithWarmup(() -> {
+            int[] data = generateData(n, 42);
+            MinHeap heap = new MinHeap(n, m);
+            m.reset();
+
+            // Вставка n элементов
+            for (int val : data) {
+                heap.insert(val);
+            }
+
+            // Извлечение n элементов и проверка сортировки
+            int prev = Integer.MIN_VALUE;
+            for (int i = 0; i < n; i++) {
+                int current = heap.extractMin();
+                if (current < prev) {
+                    throw new IllegalStateException("Нарушение неубывающего порядка кучи: " + current + " < " + prev);
+                }
+                prev = current;
+            }
+        }, m);
+
+        writeCsvRow(writer, workload, variant, "MinHeap", n, res);
+    }
+
+    // --- Вспомогательные методы ---
+
+    private static IntList createAndPopulateList(IntList list, int n) {
+        int[] data = generateData(n, 42);
+        for (int val : data) {
+            list.add(val);
+        }
+        return list;
+    }
+
+    private static int[] generateData(int n, long seed) {
+        Random rand = new Random(seed);
+        int[] data = new int[n];
+        for (int i = 0; i < n; i++) {
+            data[i] = rand.nextInt(1_000_000);
+        }
+        return data;
+    }
+
+    private static int[] generateSearchKeys(int[] initialData, int count) {
+        int half = count / 2;
+        int[] keys = new int[count];
+        Random rand = new Random(100);
+
+        // 50% гарантированно присутствующих элементов
+        for (int i = 0; i < half; i++) {
+            keys[i] = initialData[rand.nextInt(initialData.length)];
+        }
+
+        // 50% гарантированно отсутствующих элементов (диапазон > 2_000_000)
+        for (int i = half; i < count; i++) {
+            keys[i] = 2_000_000 + rand.nextInt(1_000_000);
+        }
+
+        // Перемешивание ключей
+        for (int i = keys.length - 1; i > 0; i--) {
+            int j = rand.nextInt(i + 1);
+            int temp = keys[i];
+            keys[i] = keys[j];
+            keys[j] = temp;
+        }
+
+        return keys;
+    }
+
+    private static void writeCsvRow(PrintWriter writer, String workload, String variant,
+                                    String structure, int n, RunResult res) {
+        writer.printf(Locale.US, "%s,%s,%s,%d,%.3f,%d,%d,%d%n",
+                workload,
+                variant,
+                structure,
+                n,
+                res.timeMs,
+                res.steps,
+                res.moves,
+                res.comparisons
+        );
+        writer.flush();
+    }}
