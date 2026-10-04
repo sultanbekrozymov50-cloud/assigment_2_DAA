@@ -46,16 +46,38 @@
 
 ---
 
-## 3. Discussion & Experimental Analysis
+## 3. Visualizations
 
-1. The empirical benchmark results closely match the theoretical asymptotic complexity bounds across all workloads W1–W4.
-2. In **W1 (Random Access)**, `DynamicArray` exhibits flat $O(1)$ response times (~0.015 ms) regardless of $N$, whereas `MyLinkedList` scales linearly $O(N)$ up to ~920 ms for $N = 100,000$. This huge gap illustrates the extreme CPU overhead of pointer traversal without direct memory indexing.
-3. In **W2 (Linear Search)**, both structures perform $O(N)$ comparisons ($75 \times 10^6$ operations at $N = 100,000$). However, `DynamicArray` completes in ~32.5 ms versus ~110.0 ms for `MyLinkedList`.
-4. This performance gap in W2 is directly explained by **CPU Cache Lines** and **Pointer Chasing**. Elements in `DynamicArray` reside in contiguous memory locations, allowing the CPU hardware prefetcher to load entire 64-byte cache lines into L1/L2 cache ahead of time.
-5. In contrast, `MyLinkedList` nodes are dynamically allocated on the JVM heap, scattering memory addresses. Traversing linked nodes causes frequent CPU cache misses because the CPU must wait to read each node's `next` reference before knowing the address of the next node (known as **Pointer Chasing**).
-6. Additionally, each `Node` object in Java incurs a 16-byte object header overhead, consuming significantly more memory bandwidth than primitive array elements.
-7. In **W3 (Insert/Remove at Head vs Middle)**, `MyLinkedList` achieves superior performance at `head` (~0.015 ms for 1,000 operations at $N = 100,000$), whereas `DynamicArray` suffers from massive $O(N)$ memory copies ($200 \times 10^6$ element moves taking ~135 ms).
-8. Conversely, at `middle` in **W3**, `MyLinkedList` loses its advantage (~105 ms) because node traversal to index $N/2$ requires $O(N)$ steps, making node searching slower than array memory shifting (~68 ms).
-9. In **W4 (MinHeap Operations)**, the binary heap demonstrates efficient $O(\log N)$ growth for both `insert` and `extractMin` operations.
-10. Total operation metrics (steps, moves, comparisons) for `MinHeap` at $N = 100,000$ remained below $6 \times 10^6$, proving logarithmic bounds for heap height operations.
-11. Overall, `DynamicArray` is the preferred general-purpose sequential structure due to memory locality and cache efficiency, while `MyLinkedList` is optimal strictly when frequent insertions and deletions occur at the boundaries (`head`).
+### Workload W1: Random Access (`get`)
+![W1 Execution Time](results/plots/W1_time.png)
+![W1 Operations Metrics](results/plots/W1_metrics.png)
+
+### Workload W2: Linear Search (`contains`)
+![W2 Execution Time](results/plots/W2_time.png)
+![W2 Operations Metrics](results/plots/W2_metrics.png)
+
+### Workload W3: Insert and Remove (Head vs Middle)
+![W3 Head Execution Time](results/plots/W3_head_time.png)
+![W3 Head Metrics](results/plots/W3_head_metrics.png)
+![W3 Middle Execution Time](results/plots/W3_middle_time.png)
+![W3 Middle Metrics](results/plots/W3_middle_metrics.png)
+
+### Workload W4: MinHeap (`insert` + `extractMin`)
+![W4 Execution Time](results/plots/W4_time.png)
+![W4 Operations Metrics](results/plots/W4_metrics.png)
+
+---
+
+## 4. Discussion & Experimental Analysis
+
+1. **W1 (Random Access):** At $N = 100,000$, `DynamicArray` completes 10,000 random `get` calls in just **0.040 ms** ($10,000$ steps), whereas `MyLinkedList` takes **703.000 ms** and performs **499,743,813 steps**. This massive difference highlights the efficiency of direct memory indexing versus $O(N)$ node traversal.
+2. **W2 (Linear Search):** At $N = 100,000$, both structures execute exactly **73,984,907 steps and comparisons**. However, `DynamicArray` runs in **25.300 ms**, while `MyLinkedList` takes **90.300 ms** (~3.5x slower).
+3. **Hardware & Cache Line Effects:** The speed advantage of `DynamicArray` in W2 is explained by contiguous memory layouts. Modern CPUs prefetch memory in 64-byte **Cache Lines**. Reading `DynamicArray` loads contiguous elements straight into L1/L2 cache ahead of execution.
+4. **Pointer Chasing & Object Headers:** `MyLinkedList` nodes are dynamically allocated on the JVM heap. Traversing the list causes **Pointer Chasing** — the CPU must wait for each node's `next` pointer before reading the next memory address, leading to frequent CPU Cache Misses. Furthermore, each Java `Node` object incurs a **16–24 byte Object Header** overhead, consuming vastly more memory bandwidth than a primitive `int[]` array.
+5. **Garbage Collector (GC) Impact:** Allocating 100,000 distinct `Node` objects for `MyLinkedList` creates substantial pressure on the JVM Garbage Collector. The GC must track and manage each individual heap object, whereas `DynamicArray` requires only a single contiguous array object for all numbers, minimizing memory management overhead.
+6. **W3 (Insert/Remove at Head):** At $N = 100,000$, `MyLinkedList` handles 1,000 head operations in **0.015 ms** ($1,000$ steps, $2,000$ moves) due to $O(1)$ reference updates. `DynamicArray` takes **13.600 ms** and executes **201,100,000 moves** due to element shifting.
+7. **W3 (Insert/Remove at Middle):** At $N = 100,000$, `DynamicArray` completes in **7.000 ms** ($100,600,500$ moves), while `MyLinkedList` takes **149.000 ms** ($100,498,500$ steps). Although both scale with $O(N)$, array memory shifting via optimized CPU instructions (`System.arraycopy`) is dramatically faster than linked list traversal to index $N/2$.
+8. **W4 (MinHeap Scaling):** At $N = 100,000$, `MinHeap` performs 100,000 inserts and 100,000 extracts in **36.800 ms**. Total operations stand at **6,320,223 steps** (which is greater than $6 \times 10^6$), **4,787,924 moves**, and **3,060,107 comparisons**, which perfectly conforms to the theoretical $O(N \log N)$ bound ($N \log_2 N \approx 1.66 \times 10^6$ element comparisons multiplied by multi-step sift operations).
+9. **When to use DynamicArray:** Ideal for general-purpose storage, frequent read access (`get`), linear iteration, and cache efficiency.
+10. **When to use MyLinkedList:** Best strictly when frequent insertions and deletions occur at the boundaries (`head`), or when building queues/stacks without index access.
+11. **When MinHeap is Better:** A MinHeap is far superior when you need to continuously extract the minimum element from a dynamically changing set of items (such as a priority task queue). In this case, `extractMin` runs in $O(\log n)$ time, which is vastly faster than scanning an entire unorganized array for the minimum in $O(n)$ time.

@@ -138,7 +138,7 @@ public class MyLinkedList implements IntList {
 
     private void checkBounds(int index) {
         if (index < 0 || index >= size) {
-            throw new IndexOutOfBoundsException("Индекс за пределами: " + index);
+            throw new IndexOutOfBoundsException("Index out of bounds: " + index);
         }
     }
 }

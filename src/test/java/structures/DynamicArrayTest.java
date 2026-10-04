@@ -34,7 +34,6 @@ public class DynamicArrayTest {
         assertEquals(30, array.get(2));
     }
 
-    // Дифференциальное тестирование: сравнение с java.util.ArrayList на Random(42)
     @Test
     void testCompareWithJavaArrayList() {
         ArrayList<Integer> expected = new ArrayList<>();

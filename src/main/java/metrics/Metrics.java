@@ -9,14 +9,12 @@ public class Metrics {
         reset();
     }
 
-    // Обнуление всех счетчиков
     public void reset() {
         this.steps = 0;
         this.moves = 0;
         this.comparisons = 0;
     }
 
-    // Методы инкремента
     public void incSteps() { this.steps++; }
     public void incMoves() { this.moves++; }
     public void incComparisons() { this.comparisons++; }
@@ -25,7 +23,6 @@ public class Metrics {
     public void addMoves(long delta) { this.moves += delta; }
     public void addComparisons(long delta) { this.comparisons += delta; }
 
-    // Геттеры для чтения
     public long getSteps() { return steps; }
     public long getMoves() { return moves; }
     public long getComparisons() { return comparisons; }

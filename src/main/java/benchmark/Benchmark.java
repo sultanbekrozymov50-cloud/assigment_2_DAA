@@ -24,7 +24,6 @@ public class Benchmark {
     private static final int WARMUP_RUNS = 2;
     private static final int MEASURE_RUNS = 5;
 
-    // Контейнер для W2: передает подготовленный список и ключи в замеряемую фазу
     private static class W2Data {
         final IntList list;
         final int[] searchKeys;
@@ -65,47 +64,41 @@ public class Benchmark {
                 runW4(writer, n);
             }
 
-            System.out.println("Бенчмарк успешно завершен! Результаты сохранены в " + CSV_FILE);
+            System.out.println("Benchmark completed successfully! Results saved in " + CSV_FILE);
         } catch (IOException e) {
-            System.err.println("Ошибка записи в CSV: " + e.getMessage());
+            System.err.println("Error writing to CSV: " + e.getMessage());
         }
     }
 
-    // Замеряет ТОЛЬКО выполнение action. Вызов setup выполняется ДО включения секундомера!
     private static <T> RunResult executeWithWarmup(Supplier<T> setup, Consumer<T> action, Metrics metrics) {
-        // Прогрев (Warmup)
         for (int i = 0; i < WARMUP_RUNS; i++) {
             T target = setup.get();
             metrics.reset();
             action.accept(target);
         }
 
-        // Измерения (Measurement)
         List<RunResult> results = new ArrayList<>();
         for (int i = 0; i < MEASURE_RUNS; i++) {
-            T target = setup.get(); // Подготовка данных происходит ДО секундомера
-            metrics.reset();        // Сброс счетчиков операций
+            T target = setup.get();
+            metrics.reset();
 
             long start = System.nanoTime();
-            action.accept(target);  // Измеряем ТОЛЬКО целевую нагрузку
+            action.accept(target);
             long end = System.nanoTime();
 
             double timeMs = (end - start) / 1_000_000.0;
             results.add(new RunResult(timeMs, metrics.getSteps(), metrics.getMoves(), metrics.getComparisons()));
         }
 
-        // Выбор медианного значения из 5 прогонов
         results.sort((a, b) -> Double.compare(a.timeMs, b.timeMs));
         return results.get(MEASURE_RUNS / 2);
     }
 
-    // --- W1: 10 000 вызовов get со случайным индексом ---
     private static void runW1(PrintWriter writer, int n) {
         String workload = "W1";
         String variant = "-";
         int getOps = 10_000;
 
-        // DynamicArray
         {
             Metrics m = new Metrics();
             RunResult res = executeWithWarmup(
@@ -121,7 +114,6 @@ public class Benchmark {
             writeCsvRow(writer, workload, variant, "DynamicArray", n, res);
         }
 
-        // MyLinkedList
         {
             Metrics m = new Metrics();
             RunResult res = executeWithWarmup(
@@ -138,13 +130,11 @@ public class Benchmark {
         }
     }
 
-    // --- W2: 1 000 вызовов contains (ключи генерируются в setup ДО замера) ---
     private static void runW2(PrintWriter writer, int n) {
         String workload = "W2";
         String variant = "-";
         int searchOps = 1_000;
 
-        // DynamicArray
         {
             Metrics m = new Metrics();
             RunResult res = executeWithWarmup(
@@ -153,7 +143,7 @@ public class Benchmark {
                         IntList list = new DynamicArray(n, m);
                         for (int val : initialData) list.add(val);
                         int[] searchKeys = generateSearchKeys(initialData, searchOps);
-                        return new W2Data(list, searchKeys); // Список и ключи готовы до секундомера
+                        return new W2Data(list, searchKeys);
                     },
                     data -> {
                         for (int key : data.searchKeys) {
@@ -165,7 +155,6 @@ public class Benchmark {
             writeCsvRow(writer, workload, variant, "DynamicArray", n, res);
         }
 
-        // MyLinkedList
         {
             Metrics m = new Metrics();
             RunResult res = executeWithWarmup(
@@ -187,13 +176,11 @@ public class Benchmark {
         }
     }
 
-    // --- W3: 1 000 вставок и 1 000 удалений в head и middle ---
     private static void runW3(PrintWriter writer, int n) {
         String workload = "W3";
         int ops = 1_000;
 
         for (String variant : new String[]{"head", "middle"}) {
-            // DynamicArray
             {
                 Metrics m = new Metrics();
                 RunResult res = executeWithWarmup(
@@ -213,7 +200,6 @@ public class Benchmark {
                 writeCsvRow(writer, workload, variant, "DynamicArray", n, res);
             }
 
-            // MyLinkedList
             {
                 Metrics m = new Metrics();
                 RunResult res = executeWithWarmup(
@@ -235,7 +221,6 @@ public class Benchmark {
         }
     }
 
-    // --- W4: MinHeap — n вставок и n extractMin ---
     private static void runW4(PrintWriter writer, int n) {
         String workload = "W4";
         String variant = "-";

@@ -39,7 +39,6 @@ public class MyLinkedListTest {
         assertEquals(20, list.get(0));
     }
 
-    // Дифференциальное тестирование: сравнение с java.util.ArrayList на Random(42)
     @Test
     void testCompareWithJavaList() {
         ArrayList<Integer> expected = new ArrayList<>();

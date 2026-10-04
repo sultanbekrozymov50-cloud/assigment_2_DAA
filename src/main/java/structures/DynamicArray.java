@@ -35,7 +35,7 @@ public class DynamicArray implements IntList {
     @Override
     public void add(int index, int x) {
         if (index < 0 || index > size) {
-            throw new IndexOutOfBoundsException("Индекс за пределами: " + index);
+            throw new IndexOutOfBoundsException("Index out of bounds: " + index);
         }
         if (size == capacity) {
             grow();
@@ -105,7 +105,7 @@ public class DynamicArray implements IntList {
 
     private void checkBounds(int index) {
         if (index < 0 || index >= size) {
-            throw new IndexOutOfBoundsException("Индекс за пределами: " + index);
+            throw new IndexOutOfBoundsException("Index out of bounds: " + index);
         }
     }
 }

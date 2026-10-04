@@ -60,7 +60,7 @@ public class MinHeapTest {
         int prev = heap.extractMin();
         for (int i = 1; i < n; i++) {
             int curr = heap.extractMin();
-            assertTrue(curr >= prev, "Инвариант порядка кучи нарушен: " + curr + " < " + prev);
+            assertTrue(curr >= prev, "Heap order invariant violated: " + curr + " < " + prev);
             prev = curr;
         }
         assertEquals(0, heap.getSize());
@@ -87,11 +87,11 @@ public class MinHeapTest {
 
             if (left < size) {
                 assertTrue(heap.get(i) <= heap.get(left),
-                        "Инвариант кучи нарушен: parent (" + heap.get(i) + ") > left (" + heap.get(left) + ")");
+                        "Heap invariant broken: parent (" + heap.get(i) + ") > left (" + heap.get(left) + ")");
             }
             if (right < size) {
                 assertTrue(heap.get(i) <= heap.get(right),
-                        "Инвариант кучи нарушен: parent (" + heap.get(i) + ") > right (" + heap.get(right) + ")");
+                        "Heap invariant broken: parent (" + heap.get(i) + ") > right (" + heap.get(right) + ")");
             }
         }
     }
