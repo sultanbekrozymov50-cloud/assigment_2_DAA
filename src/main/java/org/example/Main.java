@@ -40,6 +40,6 @@ public class Main {
         System.out.println("MinHeap peekMin (после extract): " + heap.peekMin());
         System.out.println("Метрики MinHeap: " + heapMetrics);
 
-        System.out.println("\nAll basic checks completed successfully.!");
+        System.out.println("\nAll basic checks completed successfully.q!");
     }
 }
