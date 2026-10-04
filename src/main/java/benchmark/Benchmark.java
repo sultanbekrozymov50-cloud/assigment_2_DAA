@@ -24,6 +24,17 @@ public class Benchmark {
     private static final int WARMUP_RUNS = 2;
     private static final int MEASURE_RUNS = 5;
 
+    // Контейнер для W2: передает подготовленный список и ключи в замеряемую фазу
+    private static class W2Data {
+        final IntList list;
+        final int[] searchKeys;
+
+        W2Data(IntList list, int[] searchKeys) {
+            this.list = list;
+            this.searchKeys = searchKeys;
+        }
+    }
+
     private static class RunResult {
         double timeMs;
         long steps;
@@ -54,13 +65,13 @@ public class Benchmark {
                 runW4(writer, n);
             }
 
-            System.out.println("Бенчмарк успешно выполнен. Результаты сохранены в " + CSV_FILE);
+            System.out.println("Бенчмарк успешно завершен! Результаты сохранены в " + CSV_FILE);
         } catch (IOException e) {
             System.err.println("Ошибка записи в CSV: " + e.getMessage());
         }
     }
 
-    // Измерение только фазы action (подготовка setup выполняется до таймера)
+    // Замеряет ТОЛЬКО выполнение action. Вызов setup выполняется ДО включения секундомера!
     private static <T> RunResult executeWithWarmup(Supplier<T> setup, Consumer<T> action, Metrics metrics) {
         // Прогрев (Warmup)
         for (int i = 0; i < WARMUP_RUNS; i++) {
@@ -69,21 +80,21 @@ public class Benchmark {
             action.accept(target);
         }
 
-        // Измерение (Measurement)
+        // Измерения (Measurement)
         List<RunResult> results = new ArrayList<>();
         for (int i = 0; i < MEASURE_RUNS; i++) {
-            T target = setup.get();
-            metrics.reset(); // Сбрасываем метрики строго перед замеряемой фазой
+            T target = setup.get(); // Подготовка данных происходит ДО секундомера
+            metrics.reset();        // Сброс счетчиков операций
 
             long start = System.nanoTime();
-            action.accept(target);
+            action.accept(target);  // Измеряем ТОЛЬКО целевую нагрузку
             long end = System.nanoTime();
 
             double timeMs = (end - start) / 1_000_000.0;
             results.add(new RunResult(timeMs, metrics.getSteps(), metrics.getMoves(), metrics.getComparisons()));
         }
 
-        // Выбор медианы из 5 прогонов
+        // Выбор медианного значения из 5 прогонов
         results.sort((a, b) -> Double.compare(a.timeMs, b.timeMs));
         return results.get(MEASURE_RUNS / 2);
     }
@@ -127,7 +138,7 @@ public class Benchmark {
         }
     }
 
-    // --- W2: 1 000 вызовов contains (50% есть, 50% нет) ---
+    // --- W2: 1 000 вызовов contains (ключи генерируются в setup ДО замера) ---
     private static void runW2(PrintWriter writer, int n) {
         String workload = "W2";
         String variant = "-";
@@ -137,11 +148,16 @@ public class Benchmark {
         {
             Metrics m = new Metrics();
             RunResult res = executeWithWarmup(
-                    () -> populateList(new DynamicArray(n, m), n),
-                    list -> {
-                        int[] searchKeys = generateSearchKeys(n, searchOps);
-                        for (int key : searchKeys) {
-                            list.contains(key);
+                    () -> {
+                        int[] initialData = generateData(n, 42);
+                        IntList list = new DynamicArray(n, m);
+                        for (int val : initialData) list.add(val);
+                        int[] searchKeys = generateSearchKeys(initialData, searchOps);
+                        return new W2Data(list, searchKeys); // Список и ключи готовы до секундомера
+                    },
+                    data -> {
+                        for (int key : data.searchKeys) {
+                            data.list.contains(key);
                         }
                     },
                     m
@@ -153,11 +169,16 @@ public class Benchmark {
         {
             Metrics m = new Metrics();
             RunResult res = executeWithWarmup(
-                    () -> populateList(new MyLinkedList(m), n),
-                    list -> {
-                        int[] searchKeys = generateSearchKeys(n, searchOps);
-                        for (int key : searchKeys) {
-                            list.contains(key);
+                    () -> {
+                        int[] initialData = generateData(n, 42);
+                        IntList list = new MyLinkedList(m);
+                        for (int val : initialData) list.add(val);
+                        int[] searchKeys = generateSearchKeys(initialData, searchOps);
+                        return new W2Data(list, searchKeys);
+                    },
+                    data -> {
+                        for (int key : data.searchKeys) {
+                            data.list.contains(key);
                         }
                     },
                     m
@@ -260,8 +281,8 @@ public class Benchmark {
         return data;
     }
 
-    private static int[] generateSearchKeys(int n, int count) {
-        int[] initialData = generateData(n, 42);
+    private static int[] generateSearchKeys(int[] initialData, int count) {
+        int n = initialData.length;
         int[] keys = new int[count];
         Random rand = new Random(100);
 

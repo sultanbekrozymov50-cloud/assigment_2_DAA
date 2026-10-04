@@ -63,6 +63,14 @@ public class MinHeap {
         return size;
     }
 
+    // Вспомогательный метод для проверки элементов в тестах
+    public int get(int index) {
+        if (index < 0 || index >= size) {
+            throw new IndexOutOfBoundsException("Индекс за пределами: " + index);
+        }
+        return array[index];
+    }
+
     private void siftUp(int index) {
         while (index > 0) {
             int parent = (index - 1) / 2;
