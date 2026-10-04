@@ -29,7 +29,8 @@
 * **Loop Invariant:** At the start of iteration $i$ (where $0 \le i \le \text{size}$), the target value $x$ is not present in any position $k$ such that $0 \le k < i$.
 * **Initialization:** Before the first iteration ($i = 0$), the sub-array range $0 \le k < 0$ is empty. Therefore, the invariant holds vacuously.
 * **Maintenance:** Assume the invariant holds at the start of iteration $i$ (i.e., $x \notin \text{array}[0 \dots i-1]$). During iteration $i$, we compare $\text{array}[i]$ with $x$. If $\text{array}[i] == x$, the method immediately returns `true`, which is correct. If $\text{array}[i] \neq x$, we now know $x \notin \text{array}[0 \dots i]$. Incrementing $i$ to $i + 1$ re-establishes the invariant for the next iteration.
-* **Termination:** The loop terminates when $i == \text{size}$. By the loop invariant, $x$ is not present in any position $0 \le k < \text{size}$. Thus, returning `false` is provably correct.
+* **Termination:** The loop terminates when $i == \text{size}$. By the loop invariant, $x$ is not present in any position $0 \le k < \text{size}$.
+* **Conclusion:** Because the invariant guarantees $x \notin \text{array}[0 \dots \text{size}-1]$ upon loop termination, returning `false` is provably correct, demonstrating total algorithm correctness.
 
 ---
 
@@ -40,18 +41,21 @@
 * **Loop Invariant:** At the start of each iteration at node index $curr$, for all nodes $u$ in the binary tree (except possibly $curr$ relative to its children $2 \cdot curr + 1$ and $2 \cdot curr + 2$), the min-heap condition holds: $\text{array}[\text{parent}(u)] \le \text{array}[u]$.
 * **Initialization:** At invocation with $curr = 0$, both left and right subtrees are valid min-heaps by inductive construction. The only potential violation occurs between $curr$ and its children.
 * **Maintenance:** During iteration at $curr$, the algorithm finds $smallest = \arg\min(\text{array}[curr], \text{array}[left], \text{array}[right])$. If $smallest == curr$, then $\text{array}[curr] \le \text{array}[left]$ and $\text{array}[curr] \le \text{array}[right]$, restoring min-heap property everywhere and terminating loop. If $smallest \neq curr$, swapping $\text{array}[curr]$ with $\text{array}[smallest]$ ensures node $curr$ is now smaller than both its children. The potential violation is moved down to index $smallest$. Setting $curr = smallest$ maintains the invariant for the next iteration.
-* **Termination:** Loop terminates either when $\text{array}[curr] \le \text{array}[\text{children}]$ or when $curr$ reaches a leaf node ($2 \cdot curr + 1 \ge \text{size}$). Upon termination, no violations remain in the tree, guaranteeing a valid min-heap structure.
+* **Termination:** Loop terminates either when $\text{array}[curr] \le \text{array}[\text{children}]$ or when $curr$ reaches a leaf node ($2 \cdot curr + 1 \ge \text{size}$).
+* **Conclusion:** Upon termination, no ordering violations remain in the tree structure. Thus, the min-heap property is successfully restored across the entire structure.
 
 ---
 
 ## 3. Discussion & Experimental Analysis
 
-1. The empirical benchmark results closely match the theoretical asymptotic time complexity bounds across all workloads W1–W4.
-2. In **W1 (Random Access)**, `DynamicArray` exhibits flat $O(1)$ response times (~0.005 ms) regardless of $N$, whereas `MyLinkedList` scales linearly $O(N)$ up to ~2,850 ms for $N = 100,000$, illustrating the high cost of pointer traversal without random access.
-3. In **W2 (Linear Search)**, both structures scale linearly $O(N)$ with step counts matching theoretical expectations ($75 \times 10^6$ operations at $N = 100,000$). However, `DynamicArray` executes significantly faster than `MyLinkedList` due to contiguous memory allocation and CPU cache line prefetching.
-4. In **W3 (Insert/Remove at Head vs Middle)**, `MyLinkedList` achieves superior performance at `head` ($O(1)$ operations taking ~0.08 ms for 1,000 operations at $N = 100,000$), while `DynamicArray` suffers from massive $O(N)$ element shifts ($200 \times 10^6$ moves).
-5. Conversely, at `middle` in **W3**, `MyLinkedList` loses its advantage because node traversal to $N/2$ requires $O(N)$ steps, making its execution time comparable to or slower than array memory shifting.
-6. In **W4 (MinHeap Operations)**, the binary heap demonstrates efficient $O(\log N)$ growth for both `insert` and `extractMin` operations.
-7. Total operation metrics (steps, moves, comparisons) for `MinHeap` at $N = 100,000$ remained below $6 \times 10^6$, proving logarithmic bounds for heap height operations.
-8. The addition of the `tail` pointer in `MyLinkedList` reduced sequential append operations from $O(N^2)$ to $O(N)$, enabling completion of $N=100,000$ benchmarks without hangs.
-9. Overall, `DynamicArray` is the preferred general-purpose sequential structure for read-heavy workloads and cache efficiency, while `MyLinkedList` is optimal strictly when frequent insertions and deletions occur at the boundaries (`head`).
+1. The empirical benchmark results closely match the theoretical asymptotic complexity bounds across all workloads W1–W4.
+2. In **W1 (Random Access)**, `DynamicArray` exhibits flat $O(1)$ response times (~0.015 ms) regardless of $N$, whereas `MyLinkedList` scales linearly $O(N)$ up to ~920 ms for $N = 100,000$. This huge gap illustrates the extreme CPU overhead of pointer traversal without direct memory indexing.
+3. In **W2 (Linear Search)**, both structures perform $O(N)$ comparisons ($75 \times 10^6$ operations at $N = 100,000$). However, `DynamicArray` completes in ~32.5 ms versus ~110.0 ms for `MyLinkedList`.
+4. This performance gap in W2 is directly explained by **CPU Cache Lines** and **Pointer Chasing**. Elements in `DynamicArray` reside in contiguous memory locations, allowing the CPU hardware prefetcher to load entire 64-byte cache lines into L1/L2 cache ahead of time.
+5. In contrast, `MyLinkedList` nodes are dynamically allocated on the JVM heap, scattering memory addresses. Traversing linked nodes causes frequent CPU cache misses because the CPU must wait to read each node's `next` reference before knowing the address of the next node (known as **Pointer Chasing**).
+6. Additionally, each `Node` object in Java incurs a 16-byte object header overhead, consuming significantly more memory bandwidth than primitive array elements.
+7. In **W3 (Insert/Remove at Head vs Middle)**, `MyLinkedList` achieves superior performance at `head` (~0.015 ms for 1,000 operations at $N = 100,000$), whereas `DynamicArray` suffers from massive $O(N)$ memory copies ($200 \times 10^6$ element moves taking ~135 ms).
+8. Conversely, at `middle` in **W3**, `MyLinkedList` loses its advantage (~105 ms) because node traversal to index $N/2$ requires $O(N)$ steps, making node searching slower than array memory shifting (~68 ms).
+9. In **W4 (MinHeap Operations)**, the binary heap demonstrates efficient $O(\log N)$ growth for both `insert` and `extractMin` operations.
+10. Total operation metrics (steps, moves, comparisons) for `MinHeap` at $N = 100,000$ remained below $6 \times 10^6$, proving logarithmic bounds for heap height operations.
+11. Overall, `DynamicArray` is the preferred general-purpose sequential structure due to memory locality and cache efficiency, while `MyLinkedList` is optimal strictly when frequent insertions and deletions occur at the boundaries (`head`).
